@@ -47,16 +47,19 @@ const JOBS: Job[] = [
 const PAGE_SIZE = 10;
 
 export default function App() {
-  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
-  const visibleJobs = JOBS.slice(0, visibleCount);
-  const hasMore = visibleCount < JOBS.length;
+  const [currentPage, setCurrentPage] = useState(1);
+  const totalPages = Math.max(1, Math.ceil(JOBS.length / PAGE_SIZE));
+  const safePage = Math.min(Math.max(currentPage, 1), totalPages);
+  const startIndex = (safePage - 1) * PAGE_SIZE;
+  const visibleJobs = JOBS.slice(startIndex, startIndex + PAGE_SIZE);
 
   return (
     <main className="page">
       <header className="page-header">
         <h1>Open roles</h1>
         <p>
-          Showing {visibleJobs.length} of {JOBS.length} positions
+          Showing {JOBS.length === 0 ? 0 : startIndex + 1}–
+          {startIndex + visibleJobs.length} of {JOBS.length} positions
         </p>
       </header>
 
@@ -76,14 +79,42 @@ export default function App() {
         ))}
       </ul>
 
-      {hasMore && (
+      <nav className="pagination" aria-label="Pagination">
         <button
           type="button"
-          onClick={() => setVisibleCount((c) => Math.min(c + PAGE_SIZE, JOBS.length))}
+          onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+          disabled={safePage === 1}
+          aria-label="Go to previous page"
         >
-          Load More
+          Previous
         </button>
-      )}
+
+        {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
+          <button
+            key={page}
+            type="button"
+            onClick={() => setCurrentPage(page)}
+            disabled={page === safePage}
+            aria-label={`Go to page ${page}`}
+            aria-current={page === safePage ? 'page' : undefined}
+            className={page === safePage ? 'page-button active' : 'page-button'}
+          >
+            {page}
+          </button>
+        ))}
+
+        <button
+          type="button"
+          onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+          disabled={safePage === totalPages}
+          aria-label="Go to next page"
+        >
+          Next
+        </button>
+      </nav>
+      <p className="page-status" aria-live="polite">
+        Page {safePage} of {totalPages}
+      </p>
     </main>
   );
 }

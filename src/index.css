@@ -70,3 +70,32 @@ button {
   color: #fff;
   cursor: pointer;
 }
+
+button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.pagination {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.pagination .page-button {
+  padding: 0.625rem 0.9rem;
+  background: #fff;
+  color: #1a1a1a;
+}
+
+.pagination .page-button.active {
+  background: #1a1a1a;
+  color: #fff;
+}
+
+.page-status {
+  margin: 0.75rem 0 0;
+  font-size: 0.9rem;
+  color: #333;
+}
