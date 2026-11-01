@@ -1,11 +1,34 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import heroImg from './assets/hero.png'
 import reactLogo from './assets/react.svg'
 import viteLogo from './assets/vite.svg'
 import './App.css'
 
+const GREETINGS = [
+  { code: 'en', label: 'English', text: 'Hello World' },
+  { code: 'de', label: 'Deutsch', text: 'Hallo Welt' },
+  { code: 'sw', label: 'Kiswahili', text: 'Hujambo Dunia' },
+] as const
+
 function App() {
   const [count, setCount] = useState(0)
+  const [greetingIndex, setGreetingIndex] = useState(0)
+
+  useEffect(() => {
+    if (
+      typeof window !== 'undefined' &&
+      typeof window.matchMedia === 'function' &&
+      window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    ) {
+      return
+    }
+    const id = window.setInterval(() => {
+      setGreetingIndex((i) => (i + 1) % GREETINGS.length)
+    }, 2000)
+    return () => window.clearInterval(id)
+  }, [])
+
+  const greeting = GREETINGS[greetingIndex]
 
   return (
     <>
@@ -16,10 +39,24 @@ function App() {
           <img src={viteLogo} className="vite" alt="Vite logo" />
         </div>
         <div>
-          <h1>Get started</h1>
+          <h1 lang={greeting.code} aria-live="polite">
+            {greeting.text}
+          </h1>
           <p>
             Edit <code>src/App.tsx</code> and save to test <code>HMR</code>
           </p>
+          <div className="lang-selector" role="group" aria-label="Greeting language">
+            {GREETINGS.map((g, i) => (
+              <button
+                key={g.code}
+                type="button"
+                aria-pressed={i === greetingIndex}
+                onClick={() => setGreetingIndex(i)}
+              >
+                {g.label}
+              </button>
+            ))}
+          </div>
         </div>
         <button
           type="button"

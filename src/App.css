@@ -17,6 +17,29 @@
   }
 }
 
+.lang-selector {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+  margin-top: 16px;
+}
+
+.lang-selector button {
+  font-size: 14px;
+  padding: 6px 12px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.lang-selector button[aria-pressed='true'] {
+  color: var(--text-h);
+  background: var(--code-bg);
+  border-color: var(--text-h);
+}
+
 .hero {
   position: relative;
 
