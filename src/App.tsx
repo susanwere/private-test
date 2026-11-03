@@ -44,7 +44,7 @@ const JOBS: Job[] = [
   { id: 30, title: 'Intern, Software Engineering', company: 'Acme Corp', location: 'Remote', type: 'Internship', salary: '$30/hr', description: 'Paid internship.', postedAt: '2026-10-13' },
 ];
 
-const PAGE_SIZE = 10;
+const PAGE_SIZE = 5;
 
 export default function App() {
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
