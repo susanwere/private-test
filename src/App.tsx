@@ -1,89 +1,185 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
-interface Job {
+export const PAGE_SIZE = 6;
+
+const HN_API_BASE_URL = 'https://hacker-news.firebaseio.com/v0';
+
+interface HnItem {
   id: number;
-  title: string;
-  company: string;
-  location: string;
-  type: string;
-  salary: string;
-  description: string;
-  postedAt: string;
+  type?: string;
+  by?: string;
+  time?: number;
+  title?: string;
+  text?: string;
+  url?: string;
+  deleted?: boolean;
+  dead?: boolean;
 }
 
-const JOBS: Job[] = [
-  { id: 1, title: 'Frontend Developer', company: 'Acme Corp', location: 'New York, NY', type: 'Full-time', salary: '$110k – $140k', description: 'Build accessible React interfaces.', postedAt: '2026-10-28' },
-  { id: 2, title: 'Backend Engineer', company: 'Northwind', location: 'Remote', type: 'Full-time', salary: '$120k – $155k', description: 'Design Node.js APIs and Postgres schemas.', postedAt: '2026-10-27' },
-  { id: 3, title: 'Product Designer', company: 'Framerly', location: 'San Francisco, CA', type: 'Full-time', salary: '$105k – $135k', description: 'Own end-to-end product design.', postedAt: '2026-10-27' },
-  { id: 4, title: 'DevOps Engineer', company: 'Cloudnine', location: 'Austin, TX', type: 'Full-time', salary: '$125k – $160k', description: 'Manage AWS with Terraform.', postedAt: '2026-10-26' },
-  { id: 5, title: 'Data Scientist', company: 'Statly', location: 'Boston, MA', type: 'Full-time', salary: '$130k – $170k', description: 'Build churn models.', postedAt: '2026-10-26' },
-  { id: 6, title: 'Mobile Developer', company: 'Pocketapp', location: 'Remote', type: 'Contract', salary: '$70 – $95/hr', description: 'Ship React Native features.', postedAt: '2026-10-25' },
-  { id: 7, title: 'QA Engineer', company: 'Testbench', location: 'Chicago, IL', type: 'Full-time', salary: '$85k – $110k', description: 'Write Playwright suites.', postedAt: '2026-10-25' },
-  { id: 8, title: 'Engineering Manager', company: 'Acme Corp', location: 'New York, NY', type: 'Full-time', salary: '$165k – $200k', description: 'Lead a team of 6.', postedAt: '2026-10-24' },
-  { id: 9, title: 'Technical Writer', company: 'Docsmith', location: 'Remote', type: 'Part-time', salary: '$50 – $70/hr', description: 'Write API guides.', postedAt: '2026-10-24' },
-  { id: 10, title: 'Security Engineer', company: 'Vaultsec', location: 'Seattle, WA', type: 'Full-time', salary: '$140k – $180k', description: 'Run threat reviews.', postedAt: '2026-10-23' },
-  { id: 11, title: 'ML Engineer', company: 'Statly', location: 'Remote', type: 'Full-time', salary: '$150k – $190k', description: 'Deploy ranking models.', postedAt: '2026-10-23' },
-  { id: 12, title: 'Support Specialist', company: 'Helpdeskly', location: 'Denver, CO', type: 'Full-time', salary: '$55k – $70k', description: 'Triage tickets.', postedAt: '2026-10-22' },
-  { id: 13, title: 'SRE', company: 'Cloudnine', location: 'Remote', type: 'Full-time', salary: '$135k – $175k', description: 'Improve uptime and alerting.', postedAt: '2026-10-22' },
-  { id: 14, title: 'UI Engineer', company: 'Framerly', location: 'Los Angeles, CA', type: 'Full-time', salary: '$115k – $145k', description: 'Build design-system components.', postedAt: '2026-10-21' },
-  { id: 15, title: 'Product Manager', company: 'Northwind', location: 'New York, NY', type: 'Full-time', salary: '$125k – $160k', description: 'Define payments roadmap.', postedAt: '2026-10-21' },
-  { id: 16, title: 'Data Engineer', company: 'Pipely', location: 'Remote', type: 'Full-time', salary: '$130k – $165k', description: 'Build dbt pipelines.', postedAt: '2026-10-20' },
-  { id: 17, title: 'iOS Developer', company: 'Pocketapp', location: 'Cupertino, CA', type: 'Full-time', salary: '$130k – $165k', description: 'Build SwiftUI screens.', postedAt: '2026-10-20' },
-  { id: 18, title: 'Android Developer', company: 'Pocketapp', location: 'Remote', type: 'Full-time', salary: '$125k – $160k', description: 'Ship Kotlin features.', postedAt: '2026-10-19' },
-  { id: 19, title: 'Solutions Architect', company: 'Cloudnine', location: 'Boston, MA', type: 'Full-time', salary: '$150k – $185k', description: 'Guide migrations.', postedAt: '2026-10-19' },
-  { id: 20, title: 'Growth Marketer', company: 'Loopwire', location: 'Remote', type: 'Full-time', salary: '$90k – $120k', description: 'Run acquisition experiments.', postedAt: '2026-10-18' },
-  { id: 21, title: 'Customer Success Manager', company: 'Helpdeskly', location: 'Chicago, IL', type: 'Full-time', salary: '$80k – $105k', description: 'Own onboarding.', postedAt: '2026-10-18' },
-  { id: 22, title: 'Full-Stack Developer', company: 'Northwind', location: 'Remote', type: 'Full-time', salary: '$120k – $155k', description: 'React and Node dashboards.', postedAt: '2026-10-17' },
-  { id: 23, title: 'Research Scientist', company: 'Statly', location: 'San Francisco, CA', type: 'Full-time', salary: '$170k – $210k', description: 'Prototype LLM evals.', postedAt: '2026-10-17' },
-  { id: 24, title: 'HR Generalist', company: 'Acme Corp', location: 'New York, NY', type: 'Full-time', salary: '$70k – $90k', description: 'Support hiring.', postedAt: '2026-10-16' },
-  { id: 25, title: 'Finance Analyst', company: 'Ledgerly', location: 'Remote', type: 'Full-time', salary: '$85k – $110k', description: 'Forecasts and reporting.', postedAt: '2026-10-16' },
-  { id: 26, title: 'Legal Counsel', company: 'Ledgerly', location: 'Washington, DC', type: 'Full-time', salary: '$160k – $200k', description: 'Review contracts.', postedAt: '2026-10-15' },
-  { id: 27, title: 'Content Strategist', company: 'Docsmith', location: 'Remote', type: 'Contract', salary: '$60 – $80/hr', description: 'Editorial calendar.', postedAt: '2026-10-15' },
-  { id: 28, title: 'Sales Engineer', company: 'Pipely', location: 'Austin, TX', type: 'Full-time', salary: '$110k – $150k', description: 'Demos and POCs.', postedAt: '2026-10-14' },
-  { id: 29, title: 'Business Analyst', company: 'Northwind', location: 'Denver, CO', type: 'Full-time', salary: '$80k – $100k', description: 'Requirements docs.', postedAt: '2026-10-14' },
-  { id: 30, title: 'Intern, Software Engineering', company: 'Acme Corp', location: 'Remote', type: 'Internship', salary: '$30/hr', description: 'Paid internship.', postedAt: '2026-10-13' },
-];
+async function fetchJobStoryIds(signal?: AbortSignal): Promise<number[]> {
+  const response = await fetch(`${HN_API_BASE_URL}/jobstories.json`, { signal });
+  if (!response.ok) {
+    throw new Error(`Failed to fetch job IDs: ${response.status}`);
+  }
+  const data: unknown = await response.json();
+  if (!Array.isArray(data)) return [];
+  return data.filter((value): value is number => typeof value === 'number');
+}
 
-const PAGE_SIZE = 5;
+async function fetchItem(id: number, signal?: AbortSignal): Promise<HnItem | null> {
+  const response = await fetch(`${HN_API_BASE_URL}/item/${id}.json`, { signal });
+  if (!response.ok) {
+    throw new Error(`Failed to fetch item ${id}: ${response.status}`);
+  }
+  const data = (await response.json()) as HnItem | null;
+  return data;
+}
+
+function isValidJobItem(item: HnItem | null): item is HnItem {
+  if (item === null) return false;
+  if (typeof item.id !== 'number') return false;
+  if (item.deleted === true || item.dead === true) return false;
+  return true;
+}
+
+function formatPosted(time?: number): string {
+  if (typeof time !== 'number') return 'date unknown';
+  const date = new Date(time * 1000);
+  if (Number.isNaN(date.getTime())) return 'date unknown';
+  return date.toISOString().slice(0, 10);
+}
+
+function stripHtml(html: string): string {
+  return html.replace(/<[^>]*>/g, '').trim();
+}
+
+type Status = 'loading' | 'ready' | 'ids-error' | 'details-error' | 'empty';
 
 export default function App() {
-  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
-  const visibleJobs = JOBS.slice(0, visibleCount);
-  const hasMore = visibleCount < JOBS.length;
+  const [jobs, setJobs] = useState<HnItem[]>([]);
+  const [status, setStatus] = useState<Status>('loading');
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    let mounted = true;
+
+    async function load(): Promise<void> {
+      try {
+        const ids = await fetchJobStoryIds(controller.signal);
+        if (!mounted || controller.signal.aborted) return;
+        if (ids.length === 0) {
+          setJobs([]);
+          setStatus('empty');
+          return;
+        }
+        const valid: HnItem[] = [];
+        let detailFailed = false;
+        for (const id of ids) {
+          if (valid.length >= PAGE_SIZE) break;
+          if (controller.signal.aborted) return;
+          try {
+            const item = await fetchItem(id, controller.signal);
+            if (!mounted || controller.signal.aborted) return;
+            if (!isValidJobItem(item)) continue;
+            valid.push(item);
+          } catch (err) {
+            if (!mounted || controller.signal.aborted) return;
+            if (err instanceof DOMException && err.name === 'AbortError') return;
+            detailFailed = true;
+          }
+        }
+        if (!mounted || controller.signal.aborted) return;
+        if (valid.length === 0) {
+          if (detailFailed) {
+            setError('Failed to load job details. Please try again.');
+            setStatus('details-error');
+          } else {
+            setJobs([]);
+            setStatus('empty');
+          }
+          return;
+        }
+        setJobs(valid);
+        setStatus('ready');
+      } catch (err) {
+        if (!mounted || controller.signal.aborted) return;
+        if (err instanceof DOMException && err.name === 'AbortError') return;
+        setError('Failed to load jobs. Please try again.');
+        setStatus('ids-error');
+      }
+    }
+
+    load().catch(() => {
+      // State is handled inside load(); this guards against unhandled rejections.
+    });
+
+    return () => {
+      mounted = false;
+      controller.abort();
+    };
+  }, []);
+
+  if (status === 'loading') {
+    return (
+      <main className="page">
+        <header className="page-header">
+          <h1>Open roles</h1>
+        </header>
+        <p>Loading...</p>
+      </main>
+    );
+  }
+
+  if (status === 'ids-error' || status === 'details-error') {
+    return (
+      <main className="page">
+        <header className="page-header">
+          <h1>Open roles</h1>
+        </header>
+        <p role="alert">{error ?? 'Failed to load jobs. Please try again.'}</p>
+      </main>
+    );
+  }
+
+  if (status === 'empty') {
+    return (
+      <main className="page">
+        <header className="page-header">
+          <h1>Open roles</h1>
+        </header>
+        <p>No jobs available.</p>
+      </main>
+    );
+  }
 
   return (
     <main className="page">
       <header className="page-header">
         <h1>Open roles</h1>
-        <p>
-          Showing {visibleJobs.length} of {JOBS.length} positions
-        </p>
+        <p>Showing {jobs.length} positions</p>
       </header>
 
       <ul className="job-list" aria-label="Job postings">
-        {visibleJobs.map((job) => (
+        {jobs.map((job) => (
           <li key={job.id}>
             <article className="job-posting" data-testid="job-posting">
-              <h2>{job.title}</h2>
+              <h2>{job.title ?? `Job ${job.id}`}</h2>
               <p className="meta">
-                {job.company} · {job.location} · {job.type}
+                {job.by ? `By ${job.by} · ` : ''}Posted {formatPosted(job.time)}
               </p>
-              <p className="salary">{job.salary}</p>
-              <p>{job.description}</p>
-              <p className="posted">Posted {job.postedAt}</p>
+              {job.text && stripHtml(job.text) ? <p>{stripHtml(job.text).slice(0, 300)}</p> : null}
+              {job.url ? (
+                <p>
+                  <a href={job.url} target="_blank" rel="noreferrer">
+                    View posting
+                  </a>
+                </p>
+              ) : null}
             </article>
           </li>
         ))}
       </ul>
-
-      {hasMore && (
-        <button
-          type="button"
-          onClick={() => setVisibleCount((c) => Math.min(c + PAGE_SIZE, JOBS.length))}
-        >
-          Load More
-        </button>
-      )}
     </main>
   );
 }
