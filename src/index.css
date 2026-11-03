@@ -92,3 +92,13 @@ button {
   color: #fff;
   cursor: pointer;
 }
+
+button:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+button:focus-visible {
+  outline: 2px solid #1a1a1a;
+  outline-offset: 2px;
+}
