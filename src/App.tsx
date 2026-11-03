@@ -1,114 +1,10 @@
-import { useEffect, useState } from 'react';
+import { useJobPages } from './hooks/useJobPages.ts';
 import JobList from './components/JobList.tsx';
 
-export const PAGE_SIZE = 6;
-
-const HN_API_BASE_URL = 'https://hacker-news.firebaseio.com/v0';
-
-interface HnItem {
-  id: number;
-  type?: string;
-  by?: string;
-  time?: number;
-  title?: string;
-  text?: string;
-  url?: string;
-  deleted?: boolean;
-  dead?: boolean;
-}
-
-async function fetchJobStoryIds(signal?: AbortSignal): Promise<number[]> {
-  const response = await fetch(`${HN_API_BASE_URL}/jobstories.json`, { signal });
-  if (!response.ok) {
-    throw new Error(`Failed to fetch job IDs: ${response.status}`);
-  }
-  const data: unknown = await response.json();
-  if (!Array.isArray(data)) return [];
-  return data.filter((value): value is number => typeof value === 'number');
-}
-
-async function fetchItem(id: number, signal?: AbortSignal): Promise<HnItem | null> {
-  const response = await fetch(`${HN_API_BASE_URL}/item/${id}.json`, { signal });
-  if (!response.ok) {
-    throw new Error(`Failed to fetch item ${id}: ${response.status}`);
-  }
-  const data = (await response.json()) as HnItem | null;
-  return data;
-}
-
-function isValidJobItem(item: HnItem | null): item is HnItem {
-  if (item === null) return false;
-  if (typeof item.id !== 'number') return false;
-  if (item.deleted === true || item.dead === true) return false;
-  return true;
-}
-
-type Status = 'loading' | 'ready' | 'ids-error' | 'details-error' | 'empty';
+export { PAGE_SIZE } from './hooks/useJobPages.ts';
 
 export default function App() {
-  const [jobs, setJobs] = useState<HnItem[]>([]);
-  const [status, setStatus] = useState<Status>('loading');
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    const controller = new AbortController();
-    let mounted = true;
-
-    async function load(): Promise<void> {
-      try {
-        const ids = await fetchJobStoryIds(controller.signal);
-        if (!mounted || controller.signal.aborted) return;
-        if (ids.length === 0) {
-          setJobs([]);
-          setStatus('empty');
-          return;
-        }
-        const valid: HnItem[] = [];
-        let detailFailed = false;
-        for (const id of ids) {
-          if (valid.length >= PAGE_SIZE) break;
-          if (controller.signal.aborted) return;
-          try {
-            const item = await fetchItem(id, controller.signal);
-            if (!mounted || controller.signal.aborted) return;
-            if (!isValidJobItem(item)) continue;
-            valid.push(item);
-          } catch (err) {
-            if (!mounted || controller.signal.aborted) return;
-            if (err instanceof DOMException && err.name === 'AbortError') return;
-            detailFailed = true;
-          }
-        }
-        if (!mounted || controller.signal.aborted) return;
-        if (valid.length === 0) {
-          if (detailFailed) {
-            setError('Failed to load job details. Please try again.');
-            setStatus('details-error');
-          } else {
-            setJobs([]);
-            setStatus('empty');
-          }
-          return;
-        }
-        setJobs(valid);
-        setStatus('ready');
-      } catch (err) {
-        if (!mounted || controller.signal.aborted) return;
-        if (err instanceof DOMException && err.name === 'AbortError') return;
-        setError('Failed to load jobs. Please try again.');
-        setStatus('ids-error');
-      }
-    }
-
-    load().catch(() => {
-      // State is handled inside load(); this guards against unhandled rejections.
-    });
-
-    return () => {
-      mounted = false;
-      controller.abort();
-    };
-  }, []);
+  const { jobs, status, error, hasMore, isLoadingMore, loadMore } = useJobPages();
 
   if (status === 'loading') {
     return (
@@ -151,6 +47,12 @@ export default function App() {
       </header>
 
       <JobList jobs={jobs} />
+
+      {hasMore ? (
+        <button type="button" onClick={loadMore} disabled={isLoadingMore} aria-busy={isLoadingMore}>
+          {isLoadingMore ? 'Loading more...' : 'Load more'}
+        </button>
+      ) : null}
     </main>
   );
 }
