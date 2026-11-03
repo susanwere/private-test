@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import JobList from './components/JobList.tsx';
 
 export const PAGE_SIZE = 6;
 
@@ -40,17 +41,6 @@ function isValidJobItem(item: HnItem | null): item is HnItem {
   if (typeof item.id !== 'number') return false;
   if (item.deleted === true || item.dead === true) return false;
   return true;
-}
-
-function formatPosted(time?: number): string {
-  if (typeof time !== 'number') return 'date unknown';
-  const date = new Date(time * 1000);
-  if (Number.isNaN(date.getTime())) return 'date unknown';
-  return date.toISOString().slice(0, 10);
-}
-
-function stripHtml(html: string): string {
-  return html.replace(/<[^>]*>/g, '').trim();
 }
 
 type Status = 'loading' | 'ready' | 'ids-error' | 'details-error' | 'empty';
@@ -160,26 +150,7 @@ export default function App() {
         <p>Showing {jobs.length} positions</p>
       </header>
 
-      <ul className="job-list" aria-label="Job postings">
-        {jobs.map((job) => (
-          <li key={job.id}>
-            <article className="job-posting" data-testid="job-posting">
-              <h2>{job.title ?? `Job ${job.id}`}</h2>
-              <p className="meta">
-                {job.by ? `By ${job.by} · ` : ''}Posted {formatPosted(job.time)}
-              </p>
-              {job.text && stripHtml(job.text) ? <p>{stripHtml(job.text).slice(0, 300)}</p> : null}
-              {job.url ? (
-                <p>
-                  <a href={job.url} target="_blank" rel="noreferrer">
-                    View posting
-                  </a>
-                </p>
-              ) : null}
-            </article>
-          </li>
-        ))}
-      </ul>
+      <JobList jobs={jobs} />
     </main>
   );
 }
