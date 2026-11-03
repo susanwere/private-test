@@ -19,6 +19,10 @@ export interface HnItem {
 export type FetchIdsFn = (signal?: AbortSignal) => Promise<number[]>;
 export type FetchItemFn = (id: number, signal?: AbortSignal) => Promise<HnItem | null>;
 
+export function isAbortError(err: unknown): boolean {
+  return err instanceof DOMException && err.name === 'AbortError';
+}
+
 export async function fetchJobStoryIds(signal?: AbortSignal): Promise<number[]> {
   const response = await fetch(`${HN_API_BASE_URL}/jobstories.json`, { signal });
   if (!response.ok) {
@@ -87,7 +91,7 @@ export async function fetchJobPage(
       collected.add(item.id);
       jobs.push(item);
     } catch (err) {
-      if (err instanceof DOMException && err.name === 'AbortError') break;
+      if (isAbortError(err)) break;
       detailFailed = true;
     }
   }
@@ -106,13 +110,19 @@ export interface InitialLoadResult {
  * Framework-free pager owning the ordered ID list, the traversal cursor, the
  * displayed jobs, and the in-flight guard. `loadMore` calls that overlap an
  * in-progress page share its promise, so rapid clicks issue a single fetch.
+ * A generation counter plus a per-ID single-flight map make overlapping
+ * `loadInitial` calls (StrictMode double-mount, remount) safe: concurrent
+ * detail fetches for the same ID share one request, and only the latest
+ * generation commits cursor/jobs state.
  */
 export class JobPager {
   private ids: number[] = [];
   private cursor = 0;
   private readonly jobs: HnItem[] = [];
   private readonly seenIds = new Set<number>();
+  private readonly detailFlight = new Map<number, Promise<HnItem | null>>();
   private inFlight: Promise<JobPage> | null = null;
+  private generation = 0;
   private readonly fetchIds: FetchIdsFn;
   private readonly fetchItemFn: FetchItemFn;
   private readonly pageSize: number;
@@ -137,15 +147,16 @@ export class JobPager {
 
   /** Fetches the ID list, then the first page. Throws when IDs fail to load. */
   async loadInitial(signal?: AbortSignal): Promise<InitialLoadResult> {
+    const gen = ++this.generation;
+    this.inFlight = null;
     const ids = await this.fetchIds(signal);
-    if (signal?.aborted) {
-      throw new DOMException('Aborted', 'AbortError');
-    }
+    this.throwIfStale(gen, signal);
     this.ids = ids;
     this.cursor = 0;
     this.jobs.length = 0;
     this.seenIds.clear();
-    const page = await this.runPage(signal);
+    const page = await this.runPage(gen, signal);
+    this.throwIfStale(gen, signal);
     if (this.jobs.length === 0) {
       return {
         status: page.detailFailed ? 'details-error' : 'empty',
@@ -164,7 +175,8 @@ export class JobPager {
     if (!this.hasMore) {
       return { jobs: [], nextCursor: this.cursor, detailFailed: false };
     }
-    const pending = this.runPage(signal);
+    const gen = this.generation;
+    const pending = this.runPage(gen, signal);
     this.inFlight = pending;
     try {
       return await pending;
@@ -173,15 +185,35 @@ export class JobPager {
     }
   }
 
-  private async runPage(signal?: AbortSignal): Promise<JobPage> {
+  private throwIfStale(gen: number, signal?: AbortSignal): void {
+    if (gen !== this.generation || signal?.aborted === true) {
+      throw new DOMException('Aborted', 'AbortError');
+    }
+  }
+
+  /** Deduplicates concurrent detail fetches for the same ID. */
+  private fetchDetail(id: number, signal?: AbortSignal): Promise<HnItem | null> {
+    const existing = this.detailFlight.get(id);
+    if (existing !== undefined) return existing;
+    const pending = this.fetchItemFn(id, signal);
+    this.detailFlight.set(id, pending);
+    const cleanup = (): void => {
+      if (this.detailFlight.get(id) === pending) this.detailFlight.delete(id);
+    };
+    pending.then(cleanup, cleanup);
+    return pending;
+  }
+
+  private async runPage(gen: number, signal?: AbortSignal): Promise<JobPage> {
     const page = await fetchJobPage(
       this.ids,
       this.cursor,
-      this.fetchItemFn,
+      (id, itemSignal) => this.fetchDetail(id, itemSignal),
       this.pageSize,
       this.seenIds,
       signal,
     );
+    if (gen !== this.generation) return page;
     this.cursor = page.nextCursor;
     for (const job of page.jobs) {
       this.seenIds.add(job.id);
@@ -217,16 +249,21 @@ export function useJobPages(options: UseJobPagesOptions = {}): UseJobPagesResult
   const [hasMore, setHasMore] = useState<boolean>(false);
   const [isLoadingMore, setIsLoadingMore] = useState<boolean>(false);
   const mountedRef = useRef<boolean>(true);
+  const runIdRef = useRef<number>(0);
+  const loadMoreControllerRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     mountedRef.current = true;
+    runIdRef.current += 1;
+    const runId = runIdRef.current;
     const controller = new AbortController();
-    let cancelled = false;
+    const isCurrent = (): boolean =>
+      mountedRef.current && runId === runIdRef.current && !controller.signal.aborted;
 
     async function load(): Promise<void> {
       try {
         const result = await pager.loadInitial(controller.signal);
-        if (cancelled || controller.signal.aborted) return;
+        if (!isCurrent()) return;
         if (result.status === 'ready') {
           setJobs(pager.jobList);
           setHasMore(pager.hasMore);
@@ -240,8 +277,8 @@ export function useJobPages(options: UseJobPagesOptions = {}): UseJobPagesResult
           setStatus('details-error');
         }
       } catch (err) {
-        if (cancelled || controller.signal.aborted) return;
-        if (err instanceof DOMException && err.name === 'AbortError') return;
+        if (!isCurrent()) return;
+        if (isAbortError(err)) return;
         setError('Failed to load jobs. Please try again.');
         setStatus('ids-error');
       }
@@ -252,24 +289,39 @@ export function useJobPages(options: UseJobPagesOptions = {}): UseJobPagesResult
     });
 
     return () => {
-      cancelled = true;
       mountedRef.current = false;
       controller.abort();
+      loadMoreControllerRef.current?.abort();
     };
   }, [pager]);
 
   const loadMore = useCallback(() => {
+    if (!mountedRef.current) return;
     if (!pager.hasMore || pager.loadingMore) return;
+    const runId = runIdRef.current;
+    const controller = new AbortController();
+    loadMoreControllerRef.current = controller;
+    const isCurrent = (): boolean => mountedRef.current && runId === runIdRef.current;
     setIsLoadingMore(true);
-    pager.loadMore().then(
+    pager.loadMore(controller.signal).then(
       () => {
-        if (!mountedRef.current) return;
+        if (loadMoreControllerRef.current === controller) loadMoreControllerRef.current = null;
+        if (!isCurrent() || controller.signal.aborted) return;
         setJobs(pager.jobList);
         setHasMore(pager.hasMore);
         setIsLoadingMore(false);
       },
-      () => {
-        if (!mountedRef.current) return;
+      (err: unknown) => {
+        if (loadMoreControllerRef.current === controller) loadMoreControllerRef.current = null;
+        if (!isCurrent()) return;
+        if (isAbortError(err) || controller.signal.aborted) {
+          // Aborted on unmount; if somehow still current, release the button.
+          setIsLoadingMore(false);
+          return;
+        }
+        // Per-item detail failures are already skipped inside the pager with
+        // partial results committed; a rejected page only releases the button
+        // so displayed jobs are never lost.
         setIsLoadingMore(false);
       },
     );

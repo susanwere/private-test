@@ -1,51 +1,50 @@
+import type { ReactNode } from 'react';
 import { useJobPages } from './hooks/useJobPages.ts';
 import JobList from './components/JobList.tsx';
 
 export { PAGE_SIZE } from './hooks/useJobPages.ts';
+
+function Shell({ children, subtitle }: { children: ReactNode; subtitle?: string }) {
+  return (
+    <main className="page">
+      <header className="page-header">
+        <h1>Open roles</h1>
+        {subtitle ? <p>{subtitle}</p> : null}
+      </header>
+      {children}
+    </main>
+  );
+}
 
 export default function App() {
   const { jobs, status, error, hasMore, isLoadingMore, loadMore } = useJobPages();
 
   if (status === 'loading') {
     return (
-      <main className="page">
-        <header className="page-header">
-          <h1>Open roles</h1>
-        </header>
+      <Shell>
         <p>Loading...</p>
-      </main>
+      </Shell>
     );
   }
 
   if (status === 'ids-error' || status === 'details-error') {
     return (
-      <main className="page">
-        <header className="page-header">
-          <h1>Open roles</h1>
-        </header>
+      <Shell>
         <p role="alert">{error ?? 'Failed to load jobs. Please try again.'}</p>
-      </main>
+      </Shell>
     );
   }
 
   if (status === 'empty') {
     return (
-      <main className="page">
-        <header className="page-header">
-          <h1>Open roles</h1>
-        </header>
+      <Shell>
         <p>No jobs available.</p>
-      </main>
+      </Shell>
     );
   }
 
   return (
-    <main className="page">
-      <header className="page-header">
-        <h1>Open roles</h1>
-        <p>Showing {jobs.length} positions</p>
-      </header>
-
+    <Shell subtitle={`Showing ${jobs.length} positions`}>
       <JobList jobs={jobs} />
 
       {hasMore ? (
@@ -53,6 +52,6 @@ export default function App() {
           {isLoadingMore ? 'Loading more...' : 'Load more'}
         </button>
       ) : null}
-    </main>
+    </Shell>
   );
 }
