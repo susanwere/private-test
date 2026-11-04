@@ -9,6 +9,7 @@ interface JobPosting {
   title: string;
   by: string;
   time: number;
+  url?: string;
 }
 
 function itemUrl(id: number): string {
@@ -34,6 +35,21 @@ function isValidJobPosting(value: unknown): value is JobPosting {
   return true;
 }
 
+function getValidJobUrl(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  if (trimmed.length === 0) return null;
+  try {
+    const parsed = new URL(trimmed);
+    if (parsed.protocol === 'http:' || parsed.protocol === 'https:') {
+      return trimmed;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 function formatPostingDate(timeSeconds: number): string {
   return new Date(timeSeconds * 1000).toLocaleDateString();
 }
@@ -51,15 +67,25 @@ async function fetchJobIds(): Promise<number[]> {
   );
 }
 
-async function fetchJobItem(id: number): Promise<JobPosting | null> {
+type JobItemResult =
+  | { kind: 'ok'; job: JobPosting }
+  | { kind: 'skip' }
+  | { kind: 'error' };
+
+async function fetchJobItemResult(id: number): Promise<JobItemResult> {
   try {
     const response = await fetch(itemUrl(id));
-    if (!response.ok) return null;
-    const data: unknown = await response.json();
-    if (!isValidJobPosting(data)) return null;
-    return data;
+    if (!response.ok) return { kind: 'error' };
+    let data: unknown;
+    try {
+      data = await response.json();
+    } catch {
+      return { kind: 'error' };
+    }
+    if (!isValidJobPosting(data)) return { kind: 'skip' };
+    return { kind: 'ok', job: data };
   } catch {
-    return null;
+    return { kind: 'error' };
   }
 }
 
@@ -71,6 +97,8 @@ export default function App() {
   const [jobIds, setJobIds] = useState<number[]>([]);
   const [nextIndex, setNextIndex] = useState(0);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const [pageError, setPageError] = useState<string | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
   const loadingMoreRef = useRef(false);
   const mountedRef = useRef(true);
 
@@ -94,15 +122,27 @@ export default function App() {
       }
       const initial: JobPosting[] = [];
       let cursor = 0;
+      let failed = false;
       while (cursor < ids.length && initial.length < PAGE_SIZE) {
-        const job = await fetchJobItem(ids[cursor]);
+        const result = await fetchJobItemResult(ids[cursor]);
+        if (result.kind === 'error') {
+          failed = true;
+          break;
+        }
         cursor += 1;
-        if (job !== null) initial.push(job);
+        if (result.kind === 'ok') initial.push(result.job);
       }
-      if (!cancelled) {
+      if (cancelled) return;
+      setJobIds(ids);
+      if (failed) {
+        setJobs([]);
+        setNextIndex(0);
+        setPageError('Failed to load job postings. Please try again.');
+        setStatus('ready');
+      } else {
         setJobs(initial);
-        setJobIds(ids);
         setNextIndex(cursor);
+        setPageError(null);
         setStatus('ready');
       }
     }
@@ -111,22 +151,32 @@ export default function App() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [reloadKey]);
 
   async function handleLoadMore(): Promise<void> {
     if (loadingMoreRef.current || isLoadingMore) return;
     if (nextIndex >= jobIds.length) return;
     loadingMoreRef.current = true;
     setIsLoadingMore(true);
+    setPageError(null);
     try {
       let cursor = nextIndex;
       const page: JobPosting[] = [];
+      let failed = false;
       while (cursor < jobIds.length && page.length < PAGE_SIZE) {
-        const job = await fetchJobItem(jobIds[cursor]);
+        const result = await fetchJobItemResult(jobIds[cursor]);
+        if (result.kind === 'error') {
+          failed = true;
+          break;
+        }
         cursor += 1;
-        if (job !== null) page.push(job);
+        if (result.kind === 'ok') page.push(result.job);
       }
       if (!mountedRef.current) return;
+      if (failed) {
+        setPageError('Failed to load more jobs. Please try again.');
+        return;
+      }
       if (page.length > 0) {
         setJobs((prev) => [...prev, ...page]);
       }
@@ -137,32 +187,99 @@ export default function App() {
     }
   }
 
+  function handleRetryInitial(): void {
+    setPageError(null);
+    setStatus('loading');
+    setReloadKey((key) => key + 1);
+  }
+
   const hasMore = nextIndex < jobIds.length;
 
   return (
     <main className="app">
       <h1 className="app-title">HN Jobs</h1>
       {status === 'loading' ? (
-        <p className="status">Loading...</p>
-      ) : status === 'error' ? (
-        <p className="status status-error" role="alert">
-          Failed to load job postings. Please try again later.
+        <p className="status" role="status">
+          Loading...
         </p>
+      ) : status === 'error' ? (
+        <div className="error-block">
+          <p className="status status-error" role="alert">
+            Failed to load job postings. Please try again later.
+          </p>
+          <button
+            type="button"
+            className="retry-button"
+            onClick={handleRetryInitial}
+          >
+            Retry
+          </button>
+        </div>
+      ) : pageError !== null && jobs.length === 0 ? (
+        <div className="error-block">
+          <p className="status status-error" role="alert">
+            {pageError}
+          </p>
+          <button
+            type="button"
+            className="retry-button"
+            onClick={() => void handleLoadMore()}
+            disabled={isLoadingMore}
+          >
+            Retry
+          </button>
+          {isLoadingMore && (
+            <p className="status status-loading" role="status">
+              Loading...
+            </p>
+          )}
+        </div>
       ) : jobs.length === 0 ? (
         <p className="status">No job postings available.</p>
       ) : (
         <>
-          <ul className="job-list">
-            {jobs.map((job) => (
-              <li key={job.id} className="job-item">
-                <h2 className="job-title">{job.title}</h2>
-                <p className="job-meta">
-                  by {job.by} · {formatPostingDate(job.time)}
-                </p>
-              </li>
-            ))}
+          <ul className="job-list" aria-busy={isLoadingMore}>
+            {jobs.map((job) => {
+              const href = getValidJobUrl(job.url);
+              return (
+                <li key={job.id} className="job-item">
+                  <h2 className="job-title">
+                    {href !== null ? (
+                      <a href={href} target="_blank" rel="noopener noreferrer">
+                        {job.title}
+                      </a>
+                    ) : (
+                      job.title
+                    )}
+                  </h2>
+                  <p className="job-meta">
+                    by {job.by} · {formatPostingDate(job.time)}
+                  </p>
+                </li>
+              );
+            })}
           </ul>
-          {hasMore && (
+          {pageError !== null && (
+            <div className="error-block error-block-inline">
+              <p className="status status-error" role="alert">
+                {pageError}
+              </p>
+              <button
+                type="button"
+                className="retry-button"
+                onClick={() => void handleLoadMore()}
+                disabled={isLoadingMore}
+              >
+                Retry
+              </button>
+            </div>
+          )}
+          {isLoadingMore && (
+            <p className="status status-loading" role="status">
+              Loading more jobs...
+            </p>
+          )}
+          {hasMore && pageError === null && (
             <button
               type="button"
               className="load-more"
