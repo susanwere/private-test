@@ -1,104 +1,17 @@
+/* Global styles for the application. */
 :root {
-  color-scheme: light;
-  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-family: system-ui, sans-serif;
   line-height: 1.5;
+  color: #1a1a1a;
+  background: #ffffff;
+}
+
+* {
+  box-sizing: border-box;
 }
 
 body {
   margin: 0;
-  background: #fff;
-  color: #1a1a1a;
-}
-
-.page {
-  max-width: 760px;
-  margin: 0 auto;
-  padding: 2rem 1rem 3rem;
-}
-
-.page-header h1 {
-  font-size: 1.75rem;
-  margin: 0 0 0.25rem;
-}
-
-.page-header p {
-  margin: 0 0 1.5rem;
-  color: #333;
-}
-
-.job-list {
-  list-style: none;
-  margin: 0 0 1.5rem;
-  padding: 0;
-  display: grid;
-  gap: 1rem;
-  grid-template-columns: 1fr;
-}
-
-.job-list > li {
-  min-width: 0;
-}
-
-.job-posting {
-  border: 1px solid #ddd;
-  border-radius: 8px;
-  padding: 1rem 1.25rem;
-  overflow-wrap: break-word;
-}
-
-.job-posting h2 {
-  font-size: 1.125rem;
-  margin: 0 0 0.25rem;
-}
-
-.job-posting h2 a {
-  text-underline-offset: 2px;
-}
-
-.job-posting a:focus-visible {
-  outline: 2px solid #1a1a1a;
-  outline-offset: 2px;
-  border-radius: 2px;
-}
-
-@media (min-width: 640px) {
-  .job-list {
-    grid-template-columns: repeat(2, 1fr);
-  }
-}
-
-.meta {
-  margin: 0 0 0.25rem;
-  font-size: 0.9rem;
-}
-
-.salary {
-  margin: 0 0 0.5rem;
-  font-weight: 600;
-}
-
-.posted {
-  font-size: 0.85rem;
-  color: #444;
-  margin: 0.5rem 0 0;
-}
-
-button {
-  font: inherit;
-  padding: 0.625rem 1.5rem;
-  border: 1px solid #1a1a1a;
-  border-radius: 6px;
-  background: #1a1a1a;
-  color: #fff;
-  cursor: pointer;
-}
-
-button:disabled {
-  opacity: 0.6;
-  cursor: default;
-}
-
-button:focus-visible {
-  outline: 2px solid #1a1a1a;
-  outline-offset: 2px;
+  min-width: 320px;
+  min-height: 100vh;
 }
