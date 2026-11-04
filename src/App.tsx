@@ -1,7 +1,167 @@
-export default function App() {
+import { useEffect, useState } from 'react';
+
+export const JOBSTORIES_URL =
+  'https://hacker-news.firebaseio.com/v0/jobstories.json';
+
+export const INITIAL_JOB_COUNT = 6;
+
+export function itemUrl(id: number): string {
+  return `https://hacker-news.firebaseio.com/v0/item/${id}.json`;
+}
+
+export interface Job {
+  id: number;
+  title: string;
+  by: string;
+  /** Posting time in seconds since epoch, as returned by the HN API. */
+  time: number;
+}
+
+/** Convert HN `time` seconds to a `Date` (seconds -> milliseconds). */
+export function toJobDate(timeSeconds: number): Date {
+  return new Date(timeSeconds * 1000);
+}
+
+/** Format HN `time` seconds for display. */
+export function formatJobDate(timeSeconds: number): string {
+  return toJobDate(timeSeconds).toLocaleDateString();
+}
+
+function isNonEmptyString(value: unknown): value is string {
+  return typeof value === 'string' && value.trim().length > 0;
+}
+
+/**
+ * A record is a valid job posting when it is a non-null object with a numeric
+ * `id`, non-empty `title`/`by`, numeric `time`, and no `deleted`/`dead` flag.
+ */
+export function isValidJob(value: unknown): value is Job {
+  if (typeof value !== 'object' || value === null) return false;
+  const record = value as Record<string, unknown>;
+  if (record.deleted === true || record.dead === true) return false;
   return (
-    <main className="welcome">
-      <h1>Hello</h1>
+    typeof record.id === 'number' &&
+    Number.isFinite(record.id) &&
+    isNonEmptyString(record.title) &&
+    isNonEmptyString(record.by) &&
+    typeof record.time === 'number' &&
+    Number.isFinite(record.time)
+  );
+}
+
+/** Fetch ordered job IDs, preserving endpoint order. Throws on failure. */
+export async function fetchJobIds(
+  fetchFn: typeof fetch = fetch,
+): Promise<number[]> {
+  const res = await fetchFn(JOBSTORIES_URL);
+  if (!res.ok) {
+    throw new Error(`Failed to fetch job IDs: ${res.status}`);
+  }
+  const data: unknown = await res.json();
+  if (!Array.isArray(data)) {
+    throw new Error('Invalid job IDs response');
+  }
+  return data.filter(
+    (id): id is number => typeof id === 'number' && Number.isFinite(id),
+  );
+}
+
+/**
+ * Fetch one job detail. Returns `null` for null/deleted/malformed records,
+ * non-OK responses, and network/parse failures.
+ */
+export async function fetchJobById(
+  id: number,
+  fetchFn: typeof fetch = fetch,
+): Promise<Job | null> {
+  try {
+    const res = await fetchFn(itemUrl(id));
+    if (!res.ok) return null;
+    const data: unknown = await res.json();
+    if (!isValidJob(data)) return null;
+    return { id: data.id, title: data.title, by: data.by, time: data.time };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Load the first `limit` valid jobs, preserving endpoint order and skipping
+ * invalid/failed records. Throws only when the ID request itself fails.
+ */
+export async function loadInitialJobs(
+  fetchFn: typeof fetch = fetch,
+  limit: number = INITIAL_JOB_COUNT,
+): Promise<Job[]> {
+  const ids = await fetchJobIds(fetchFn);
+  const jobs: Job[] = [];
+  for (const id of ids) {
+    if (jobs.length >= limit) break;
+    const job = await fetchJobById(id, fetchFn);
+    if (job !== null) jobs.push(job);
+  }
+  return jobs;
+}
+
+type Status = 'loading' | 'error' | 'ready';
+
+export default function App() {
+  const [jobs, setJobs] = useState<Job[]>([]);
+  const [status, setStatus] = useState<Status>('loading');
+
+  useEffect(() => {
+    let cancelled = false;
+    loadInitialJobs()
+      .then((result) => {
+        if (cancelled) return;
+        setJobs(result);
+        setStatus('ready');
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setStatus('error');
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  return (
+    <main className="jobs">
+      <header className="jobs-header">
+        <h1>Hacker News Jobs</h1>
+        <p>Fresh job postings from Hacker News</p>
+      </header>
+      {status === 'loading' && (
+        <p className="jobs-status" role="status">
+          Loading...
+        </p>
+      )}
+      {status === 'error' && (
+        <p className="jobs-status jobs-error" role="alert">
+          Failed to load jobs. Please try again later.
+        </p>
+      )}
+      {status === 'ready' && jobs.length === 0 && (
+        <p className="jobs-status jobs-empty" role="status">
+          No jobs found.
+        </p>
+      )}
+      {status === 'ready' && jobs.length > 0 && (
+        <ul className="jobs-list">
+          {jobs.map((job) => (
+            <li key={job.id} className="job-card">
+              <h2>{job.title}</h2>
+              <p className="job-meta">
+                <span>by {job.by}</span>
+                <time dateTime={toJobDate(job.time).toISOString()}>
+                  {formatJobDate(job.time)}
+                </time>
+              </p>
+            </li>
+          ))}
+        </ul>
+      )}
     </main>
   );
 }
