@@ -114,3 +114,61 @@ body {
   opacity: 0.6;
   cursor: default;
 }
+
+.job-card a {
+  color: inherit;
+  text-decoration: underline;
+  text-decoration-color: var(--accent);
+  text-decoration-thickness: 2px;
+  text-underline-offset: 2px;
+}
+
+.job-card a:hover {
+  color: var(--accent);
+}
+
+.jobs-error p {
+  margin: 0;
+}
+
+.retry {
+  margin-top: 0.75rem;
+  padding: 0.5rem 1.25rem;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #fffdf8;
+  background: var(--accent);
+  border: 1px solid var(--accent);
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.retry:hover {
+  filter: brightness(0.95);
+}
+
+.load-more:focus-visible,
+.retry:focus-visible,
+.job-card a:focus-visible {
+  outline: 3px solid #1a1a1a;
+  outline-offset: 2px;
+}
+
+@media (max-width: 480px) {
+  .jobs {
+    padding: 1.5rem 1rem 2rem;
+  }
+
+  .jobs-header h1 {
+    font-size: 1.4rem;
+  }
+
+  .job-card h2 {
+    font-size: 1rem;
+  }
+
+  .job-meta {
+    flex-direction: column;
+    gap: 0.125rem;
+  }
+}
