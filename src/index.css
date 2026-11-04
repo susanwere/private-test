@@ -91,3 +91,26 @@ body {
 .jobs-empty {
   color: #5b574a;
 }
+
+.load-more {
+  display: block;
+  width: 100%;
+  margin-top: 1.25rem;
+  padding: 0.75rem 1.25rem;
+  font-size: 1rem;
+  font-weight: 600;
+  color: #fffdf8;
+  background: var(--accent);
+  border: 1px solid var(--accent);
+  border-radius: 10px;
+  cursor: pointer;
+}
+
+.load-more:hover:not(:disabled) {
+  filter: brightness(0.95);
+}
+
+.load-more:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
