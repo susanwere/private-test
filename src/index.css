@@ -62,3 +62,25 @@ body {
   font-size: 0.9rem;
   color: #555555;
 }
+
+.load-more {
+  margin-top: 1rem;
+  padding: 0.6rem 1.25rem;
+  font: inherit;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #1a1a1a;
+  background: #f4f4f4;
+  border: 1px solid #d4d4d4;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.load-more:hover:not(:disabled) {
+  background: #eaeaea;
+}
+
+.load-more:disabled {
+  opacity: 0.6;
+  cursor: default;
+}

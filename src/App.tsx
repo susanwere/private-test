@@ -1,8 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 const JOB_STORIES_URL =
   'https://hacker-news.firebaseio.com/v0/jobstories.json';
-const MAX_INITIAL_JOBS = 6;
+const PAGE_SIZE = 6;
 
 interface JobPosting {
   id: number;
@@ -68,6 +68,18 @@ type Status = 'loading' | 'error' | 'ready';
 export default function App() {
   const [status, setStatus] = useState<Status>('loading');
   const [jobs, setJobs] = useState<JobPosting[]>([]);
+  const [jobIds, setJobIds] = useState<number[]>([]);
+  const [nextIndex, setNextIndex] = useState(0);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const loadingMoreRef = useRef(false);
+  const mountedRef = useRef(true);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -81,13 +93,16 @@ export default function App() {
         return;
       }
       const initial: JobPosting[] = [];
-      for (const id of ids) {
-        if (initial.length >= MAX_INITIAL_JOBS) break;
-        const job = await fetchJobItem(id);
+      let cursor = 0;
+      while (cursor < ids.length && initial.length < PAGE_SIZE) {
+        const job = await fetchJobItem(ids[cursor]);
+        cursor += 1;
         if (job !== null) initial.push(job);
       }
       if (!cancelled) {
         setJobs(initial);
+        setJobIds(ids);
+        setNextIndex(cursor);
         setStatus('ready');
       }
     }
@@ -97,6 +112,32 @@ export default function App() {
       cancelled = true;
     };
   }, []);
+
+  async function handleLoadMore(): Promise<void> {
+    if (loadingMoreRef.current || isLoadingMore) return;
+    if (nextIndex >= jobIds.length) return;
+    loadingMoreRef.current = true;
+    setIsLoadingMore(true);
+    try {
+      let cursor = nextIndex;
+      const page: JobPosting[] = [];
+      while (cursor < jobIds.length && page.length < PAGE_SIZE) {
+        const job = await fetchJobItem(jobIds[cursor]);
+        cursor += 1;
+        if (job !== null) page.push(job);
+      }
+      if (!mountedRef.current) return;
+      if (page.length > 0) {
+        setJobs((prev) => [...prev, ...page]);
+      }
+      setNextIndex(cursor);
+    } finally {
+      if (mountedRef.current) setIsLoadingMore(false);
+      loadingMoreRef.current = false;
+    }
+  }
+
+  const hasMore = nextIndex < jobIds.length;
 
   return (
     <main className="app">
@@ -110,16 +151,28 @@ export default function App() {
       ) : jobs.length === 0 ? (
         <p className="status">No job postings available.</p>
       ) : (
-        <ul className="job-list">
-          {jobs.map((job) => (
-            <li key={job.id} className="job-item">
-              <h2 className="job-title">{job.title}</h2>
-              <p className="job-meta">
-                by {job.by} · {formatPostingDate(job.time)}
-              </p>
-            </li>
-          ))}
-        </ul>
+        <>
+          <ul className="job-list">
+            {jobs.map((job) => (
+              <li key={job.id} className="job-item">
+                <h2 className="job-title">{job.title}</h2>
+                <p className="job-meta">
+                  by {job.by} · {formatPostingDate(job.time)}
+                </p>
+              </li>
+            ))}
+          </ul>
+          {hasMore && (
+            <button
+              type="button"
+              className="load-more"
+              onClick={() => void handleLoadMore()}
+              disabled={isLoadingMore}
+            >
+              Load more
+            </button>
+          )}
+        </>
       )}
     </main>
   );
