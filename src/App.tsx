@@ -1,9 +1,12 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 export const JOBSTORIES_URL =
   'https://hacker-news.firebaseio.com/v0/jobstories.json';
 
 export const INITIAL_JOB_COUNT = 6;
+
+/** Number of valid postings appended per page (initial + each Load more). */
+export const JOB_PAGE_SIZE = INITIAL_JOB_COUNT;
 
 export function itemUrl(id: number): string {
   return `https://hacker-news.firebaseio.com/v0/item/${id}.json`;
@@ -85,6 +88,43 @@ export async function fetchJobById(
   }
 }
 
+export interface JobPage {
+  jobs: Job[];
+  /** Index into `ids` of the first unconsumed ID. */
+  nextIndex: number;
+}
+
+/**
+ * Load one page of up to `limit` valid jobs starting at `startIndex`,
+ * preserving endpoint order and skipping invalid/failed records by consuming
+ * through remaining IDs. Returns the jobs plus the next unconsumed index.
+ * Issues no detail request when `startIndex` is already exhausted.
+ */
+export async function loadJobPage(
+  ids: number[],
+  startIndex: number,
+  fetchFn: typeof fetch = fetch,
+  limit: number = JOB_PAGE_SIZE,
+): Promise<JobPage> {
+  const jobs: Job[] = [];
+  let index = Math.max(0, startIndex);
+  while (index < ids.length && jobs.length < limit) {
+    const job = await fetchJobById(ids[index], fetchFn);
+    index += 1;
+    if (job !== null) jobs.push(job);
+  }
+  return { jobs, nextIndex: index };
+}
+
+/** Append page jobs while dropping IDs already present (repeat-click safe). */
+export function mergeJobs(existing: Job[], incoming: Job[]): Job[] {
+  if (incoming.length === 0) return existing;
+  const seen = new Set(existing.map((job) => job.id));
+  const fresh = incoming.filter((job) => !seen.has(job.id));
+  if (fresh.length === 0) return existing;
+  return [...existing, ...fresh];
+}
+
 /**
  * Load the first `limit` valid jobs, preserving endpoint order and skipping
  * invalid/failed records. Throws only when the ID request itself fails.
@@ -94,13 +134,8 @@ export async function loadInitialJobs(
   limit: number = INITIAL_JOB_COUNT,
 ): Promise<Job[]> {
   const ids = await fetchJobIds(fetchFn);
-  const jobs: Job[] = [];
-  for (const id of ids) {
-    if (jobs.length >= limit) break;
-    const job = await fetchJobById(id, fetchFn);
-    if (job !== null) jobs.push(job);
-  }
-  return jobs;
+  const page = await loadJobPage(ids, 0, fetchFn, limit);
+  return page.jobs;
 }
 
 type Status = 'loading' | 'error' | 'ready';
@@ -108,23 +143,50 @@ type Status = 'loading' | 'error' | 'ready';
 export default function App() {
   const [jobs, setJobs] = useState<Job[]>([]);
   const [status, setStatus] = useState<Status>('loading');
+  const [jobIds, setJobIds] = useState<number[]>([]);
+  const [nextIndex, setNextIndex] = useState(0);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const loadingMoreRef = useRef(false);
 
   useEffect(() => {
     let cancelled = false;
-    loadInitialJobs()
-      .then((result) => {
+    (async () => {
+      try {
+        const ids = await fetchJobIds();
         if (cancelled) return;
-        setJobs(result);
+        const page = await loadJobPage(ids, 0);
+        if (cancelled) return;
+        setJobIds(ids);
+        setJobs(page.jobs);
+        setNextIndex(page.nextIndex);
         setStatus('ready');
-      })
-      .catch(() => {
+      } catch {
         if (cancelled) return;
         setStatus('error');
-      });
+      }
+    })();
     return () => {
       cancelled = true;
     };
   }, []);
+
+  const hasMore = nextIndex < jobIds.length;
+
+  const handleLoadMore = async () => {
+    if (loadingMoreRef.current || isLoadingMore) return;
+    if (nextIndex >= jobIds.length) return;
+    loadingMoreRef.current = true;
+    setIsLoadingMore(true);
+    const startIndex = nextIndex;
+    try {
+      const page = await loadJobPage(jobIds, startIndex);
+      setJobs((prev) => mergeJobs(prev, page.jobs));
+      setNextIndex(page.nextIndex);
+    } finally {
+      loadingMoreRef.current = false;
+      setIsLoadingMore(false);
+    }
+  };
 
   return (
     <main className="jobs">
@@ -148,19 +210,31 @@ export default function App() {
         </p>
       )}
       {status === 'ready' && jobs.length > 0 && (
-        <ul className="jobs-list">
-          {jobs.map((job) => (
-            <li key={job.id} className="job-card">
-              <h2>{job.title}</h2>
-              <p className="job-meta">
-                <span>by {job.by}</span>
-                <time dateTime={toJobDate(job.time).toISOString()}>
-                  {formatJobDate(job.time)}
-                </time>
-              </p>
-            </li>
-          ))}
-        </ul>
+        <>
+          <ul className="jobs-list">
+            {jobs.map((job) => (
+              <li key={job.id} className="job-card">
+                <h2>{job.title}</h2>
+                <p className="job-meta">
+                  <span>by {job.by}</span>
+                  <time dateTime={toJobDate(job.time).toISOString()}>
+                    {formatJobDate(job.time)}
+                  </time>
+                </p>
+              </li>
+            ))}
+          </ul>
+          {hasMore && (
+            <button
+              type="button"
+              className="load-more"
+              onClick={() => void handleLoadMore()}
+              disabled={isLoadingMore}
+            >
+              {isLoadingMore ? 'Loading...' : 'Load more'}
+            </button>
+          )}
+        </>
       )}
     </main>
   );
